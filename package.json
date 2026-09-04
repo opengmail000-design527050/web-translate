@@ -1,0 +1,17 @@
+{
+  "name": "web-translate",
+  "version": "0.2.0",
+  "private": true,
+  "description": "分段式网页双语翻译 Chrome 扩展",
+  "scripts": {
+    "test": "node test/run.js",
+    "check": "node --check common.js && node --check background.js && node --check content/content.js && node --check popup/popup.js && node --check options/options.js && npm test",
+    "e2e": "node test/e2e/smoke.cjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

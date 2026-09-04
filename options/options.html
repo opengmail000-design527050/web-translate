@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Web Translate · 设置</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+<main>
+  <header class="page-head">
+    <div class="brand"><img class="mark" src="../icons/icon48.png" alt=""><h1>Web Translate</h1></div>
+    <p class="sub">分段式网页翻译，中英对照。只翻你正在看的那一屏，翻过的存在本地，重看不再花钱。</p>
+  </header>
+
+  <section class="card">
+    <h2>模型与接口</h2>
+
+    <div class="field">
+      <label for="profileSel">配置</label>
+      <div class="profileBar">
+        <select id="profileSel"></select>
+        <input id="profileName" type="text" class="hidden" spellcheck="false" maxlength="40"
+               placeholder="给这套配置起个名字">
+        <button class="mini" id="pfRename" type="button">重命名</button>
+        <button class="mini" id="pfNew" type="button">新建</button>
+        <button class="mini" id="pfCopy" type="button">复制</button>
+        <button class="mini danger" id="pfDel" type="button">删除</button>
+      </div>
+      <p class="note">本卡片的五项属于当前配置，其余设置全局共享。切换配置会让已有译文重翻。</p>
+    </div>
+
+    <div class="field">
+      <label>快速填入</label>
+      <div class="presets">
+        <button class="mini" id="pre1" type="button">gpt-5.6-luna</button>
+        <button class="mini" id="pre2" type="button">deepseek-v4-flash</button>
+      </div>
+      <p class="note">只填地址、模型和推理写法，不动你的 Key。换下一代模型时，改「模型」那一栏的字符串就行。</p>
+    </div>
+
+    <div class="field">
+      <label for="baseUrl">API 地址</label>
+      <input id="baseUrl" type="text" spellcheck="false" placeholder="https://api.openai.com/v1">
+      <p class="note">OpenAI 兼容接口，填到 <code>/v1</code> 即可。已是完整路径就在结尾加 <code>#</code>。</p>
+      <p class="note warn hidden" id="permNote"><span id="permText"></span> <button class="mini" id="permBtn" type="button">授权访问</button></p>
+    </div>
+
+    <div class="field">
+      <label for="apiKey">API Key</label>
+      <div class="inline">
+        <input id="apiKey" type="password" spellcheck="false" placeholder="sk-...">
+        <button class="mini" id="toggleKey" type="button">显示</button>
+      </div>
+      <p class="note">只存在本机浏览器里，不同步、不外发。</p>
+    </div>
+
+    <div class="grid2">
+      <div class="field">
+        <label for="model">模型</label>
+        <input id="model" type="text" spellcheck="false" list="modelList" placeholder="gpt-5.6-luna">
+        <datalist id="modelList">
+          <option value="gpt-5.6-luna"></option>
+          <option value="deepseek-v4-flash"></option>
+        </datalist>
+        <p class="note">换模型只改这里，别的设置不用动。</p>
+      </div>
+      <div class="field">
+        <label for="targetLang">译文语言</label>
+        <input id="targetLang" type="text" list="langList" placeholder="auto">
+        <datalist id="langList">
+          <option value="auto"></option>
+          <option value="简体中文"></option>
+          <option value="繁體中文"></option>
+          <option value="English"></option>
+          <option value="日本語"></option>
+        </datalist>
+        <p class="note" id="langNote"></p>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="reasoningStyle">推理参数写法</label>
+      <select id="reasoningStyle">
+        <option value="effort_none">reasoning_effort 含 "none"（GPT-5 系列，推荐）</option>
+        <option value="effort">reasoning_effort，关闭时不发该字段 · 保守兼容</option>
+        <option value="enable_thinking">enable_thinking（DeepSeek / 通义风格）</option>
+        <option value="off">从不发送推理参数</option>
+      </select>
+      <p class="note">只决定用哪个字段名发给服务商，强度在弹窗里选。<strong>只有第一项能真正关掉推理</strong>，服务商报 400 时才换其他项。</p>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="testBtn" type="button">测试连接</button>
+    </div>
+    <div class="mcard hidden" id="testCard"></div>
+  </section>
+
+  <section class="card">
+    <h2>省 token</h2>
+    <p class="lead">分批大小、并发、短文本门槛、领域提示都已经按「读长文章」调好，不再单独开放 ——
+      调它们的收益很小，调错了却会直接抬高错位率。这里只剩两件真正因人而异的事。</p>
+
+    <div class="field">
+      <label for="scope">翻译范围</label>
+      <select id="scope">
+        <option value="main">只翻正文（自动识别，排除导航 / 侧栏 / 按钮 / 评论）</option>
+        <option value="page">整页都翻</option>
+      </select>
+      <p class="note">正文容器认不出来时会自动退回整页，弹窗里会写明。个别页面翻不全，就在弹窗里临时切「整页都翻」。</p>
+    </div>
+
+    <label class="check"><input type="checkbox" id="lazy"><span>只翻进入视野的段落<em>（默认开。关掉 = 打开就整页翻完，快但贵得多）</em></span></label>
+
+    <div class="grid2">
+      <div class="field">
+        <label for="cacheDays">缓存保留 <span class="v" id="cacheDaysV"></span></label>
+        <input id="cacheDays" type="range" min="7" max="365" step="1">
+        <p class="note">这么久没再看过才清理，重看会重新计时。</p>
+      </div>
+      <div class="field">
+        <label for="cacheMax">最多缓存页面数 <span class="v" id="cacheMaxV"></span></label>
+        <input id="cacheMax" type="range" min="50" max="2000" step="10">
+        <p class="note">超出时先淘汰最久没看的。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>译文外观</h2>
+
+    <div class="grid2">
+      <div class="field">
+        <label for="layout">显示方式</label>
+        <select id="layout">
+          <option value="both">双语对照（原文 + 译文）</option>
+          <option value="transOnly">仅译文</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="markStyle">译文标记</label>
+        <select id="markStyle">
+          <option value="line">左侧竖线</option>
+          <option value="none">无标记</option>
+          <option value="dim">淡化原文</option>
+        </select>
+        <p class="note" id="markNote"></p>
+      </div>
+      <div class="field">
+        <label for="transFont">译文字体</label>
+        <select id="transFont">
+          <option value="inherit">跟随原文</option>
+          <option value="serif">衬线 · 思源宋体</option>
+          <option value="sans">无衬线 · 思源黑体</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="transScale">译文字号 <span class="v" id="transScaleV"></span></label>
+        <input id="transScale" type="range" min="0.8" max="1.3" step="0.02">
+        <p class="note">相对原文的比例。1.00 = 和原文一样大。</p>
+      </div>
+    </div>
+
+    <div class="preview-stage">
+      <div class="preview" id="preview">
+        <div class="pv-orig">We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>自动翻译的网站</h2>
+    <p class="lead">打开就自动翻译。其余网站按 <code>Alt+A</code> 或点插件图标手动开。</p>
+    <div class="field">
+      <div class="inline">
+        <input id="siteInput" type="text" spellcheck="false" placeholder="例如 x.com（要带子域，news.ycombinator.com）">
+        <button class="mini" id="siteAdd" type="button">添加</button>
+      </div>
+    </div>
+    <div class="chips" id="siteList"></div>
+  </section>
+
+  <section class="card">
+    <h2>数据</h2>
+    <div class="statLine" id="statLine">—</div>
+    <div class="actions">
+      <button class="ghost" id="clearCache" type="button">清空翻译缓存</button>
+      <button class="ghost" id="resetStats" type="button">重置用量统计</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>恢复默认</h2>
+    <p class="lead">把所有设置改回出厂值，不动缓存和用量统计。</p>
+    <label class="check"><input type="checkbox" id="keepApi" checked><span>保留模型与接口<em>（配置档、地址、Key、模型、译文语言、推理写法）</em></span></label>
+    <div class="actions">
+      <button class="ghost danger" id="resetAll" type="button">恢复默认设置</button>
+      <span class="testOut" id="resetOut">点两下确认，不可撤销。</span>
+    </div>
+  </section>
+
+  <footer class="page-foot">改动即时生效 · v0.1.0</footer>
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="options.js" type="module"></script>
+</body>
+</html>

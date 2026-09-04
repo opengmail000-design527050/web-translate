@@ -1,0 +1,289 @@
+:root {
+  --bg: #0e0e10;
+  --panel: #161719;
+  --panel-2: #1d1e21;
+  --line: #292a2e;
+  --text: #ededee;
+  --muted: #8b8d92;
+  --dim: #5f6166;
+  --accent: #febcb9;
+  --accent-dim: #8f5c59;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  width: 296px;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 "PingFang SC", "Microsoft YaHei", "Noto Sans SC", -apple-system, Segoe UI, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- header ---------- */
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 9px; }
+.mark { width: 22px; height: 22px; display: block; object-fit: contain; }
+.name { font-size: 13.5px; font-weight: 600; letter-spacing: 1px; }
+
+.switch { display: inline-flex; cursor: pointer; }
+.switch input { display: none; }
+.track {
+  width: 36px; height: 20px;
+  border-radius: 20px;
+  background: #2a2b2f;
+  border: 1px solid var(--line);
+  display: block;
+  position: relative;
+  transition: background .18s ease;
+}
+.knob {
+  position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #86888d;
+  transition: transform .18s ease, background .18s ease;
+}
+.switch input:checked + .track { background: #3a2b2b; border-color: #4a3232; }
+.switch input:checked + .track .knob { transform: translateX(16px); background: var(--accent); }
+
+/* ---------- status ---------- */
+.status {
+  padding: 13px 16px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.status .row { display: flex; align-items: center; gap: 8px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); flex: none; }
+.dot[data-s="busy"] { background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+.dot[data-s="ready"] { background: #6f9c7d; }
+.dot[data-s="error"] { background: #d98b8b; }
+@keyframes pulse { 0%,100% { opacity: .3 } 50% { opacity: 1 } }
+
+.statusText { font-size: 12.5px; color: var(--text); }
+.title {
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar {
+  margin-top: 10px;
+  height: 2px;
+  background: #232427;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.bar span {
+  display: block; height: 100%; width: 0%;
+  background: linear-gradient(90deg, #6a6c70, var(--accent));
+  transition: width .3s ease;
+}
+.err {
+  margin-top: 9px;
+  font-size: 11px;
+  color: #d98b8b;
+  line-height: 1.45;
+  word-break: break-word;
+  max-height: 62px;
+  overflow: auto;
+}
+
+/* ---------- 主按钮 ---------- */
+.actWrap { padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.act {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: .5px;
+  padding: 9px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.act:hover { border-color: var(--accent-dim); }
+.act.on {
+  background: #241b1b;
+  border-color: #4a3232;
+  color: var(--accent);
+}
+.act:disabled { color: var(--dim); cursor: default; border-color: var(--line); background: var(--panel); }
+
+/* ---------- blocks ---------- */
+.block { padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.block.tight { padding: 11px 16px; }
+.label { font-size: 11px; color: var(--muted); letter-spacing: .5px; }
+.labelRow { display: flex; justify-content: space-between; align-items: baseline; }
+
+.seg {
+  margin-top: 9px;
+  display: flex;
+  gap: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 3px;
+}
+.seg button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.seg button:hover { color: var(--text); }
+.seg button.on {
+  background: #303136;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px #3c3d43;
+}
+.seg button.on::after {
+  content: "";
+  display: block;
+  width: 12px; height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  margin: 4px auto -4px;
+}
+
+/* 推理三档是对着某一个模型选的（同样的「关闭」，换个模型未必关得掉），
+   所以把当前模型摆在标题右边 */
+.modelTag {
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.modelTag.none { color: #d98b8b; }
+
+/* 模型名兼作配置档切换入口 */
+.pfWrap { position: relative; }
+.modelTag {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+  border-bottom: 1px dashed #3c3d43;
+}
+.modelTag:hover, .modelTag.open { color: var(--accent); border-bottom-color: var(--accent-dim); }
+
+.pfMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  min-width: 170px;
+  max-width: 240px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .45);
+}
+.pfItem {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pfItem:hover { background: #303136; }
+.pfName { display: block; font-size: 12px; }
+.pfModel {
+  display: block;
+  margin-top: 1px;
+  font-size: 10.5px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pfItem.on .pfName { color: var(--accent); }
+.pfItem.on .pfName::after { content: " ·"; }
+.pfMore {
+  margin-top: 3px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 6px 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* 切换配置之后的一句确认 —— 模型名本身也会变，这里只是让人看清换到了哪一档 */
+.toast {
+  position: fixed;
+  left: 16px; right: 16px; bottom: 10px;
+  padding: 7px 10px;
+  background: #303136;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--text);
+  text-align: center;
+  pointer-events: none;
+}
+
+.hint { margin-top: 8px; font-size: 10.5px; color: var(--dim); line-height: 1.5; }
+
+.check { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--muted); }
+.check input { accent-color: var(--accent-dim); width: 13px; height: 13px; }
+.check:hover span { color: var(--text); }
+
+/* ---------- foot ---------- */
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px 13px;
+}
+.usage { font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.link {
+  background: none; border: 0; color: var(--muted);
+  font: inherit; font-size: 12px; cursor: pointer; padding: 0;
+  border-bottom: 1px solid transparent;
+}
+.link:hover { color: var(--accent); border-bottom-color: var(--accent-dim); }
+
+.ghost {
+  margin-top: 10px;
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font: inherit; font-size: 11.5px;
+  padding: 6px 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ghost:hover { border-color: var(--accent-dim); color: var(--accent); }
+
+.hidden { display: none !important; }

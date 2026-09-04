@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="head">
+    <div class="brand">
+      <img class="mark" src="../icons/icon32.png" alt="">
+      <span class="name">Web Translate</span>
+    </div>
+    <label class="switch" title="总开关">
+      <input type="checkbox" id="master">
+      <span class="track"><span class="knob"></span></span>
+    </label>
+  </header>
+
+  <section class="status" id="statusCard">
+    <div class="row">
+      <span class="dot" id="dot"></span>
+      <span class="statusText" id="statusText">未连接到页面</span>
+    </div>
+    <div class="title" id="pageTitle"></div>
+    <div class="bar"><span id="barFill"></span></div>
+    <div class="err hidden" id="errText"></div>
+    <button class="ghost hidden" id="retryBtn">重试失败的段落</button>
+    <button class="ghost hidden" id="purgeBtn" title="丢掉这一页已缓存的译文，从头重翻">译文和原文对不上？重翻本页</button>
+  </section>
+
+  <div class="actWrap">
+    <button class="act" id="actBtn">翻译此页</button>
+  </div>
+
+  <section class="block">
+    <div class="labelRow">
+      <span class="label">推理强度</span>
+      <!-- 模型名同时是配置档的切换入口：点一下就能换一套接口，不用跑设置页 -->
+      <div class="pfWrap">
+        <button class="modelTag" id="modelTag" type="button" aria-haspopup="true" aria-expanded="false"></button>
+        <div class="pfMenu hidden" id="pfMenu" role="menu"></div>
+      </div>
+    </div>
+    <div class="seg" id="reasoning">
+      <button data-v="none">关闭</button>
+      <button data-v="low">低</button>
+      <button data-v="medium">中</button>
+    </div>
+    <div class="hint" id="reasonHint">网页翻译一般「关闭」就够，最快最省。</div>
+  </section>
+
+  <section class="block">
+    <div class="labelRow">
+      <span class="label">翻译范围</span>
+      <span class="modelTag" id="scopeTag"></span>
+    </div>
+    <div class="seg" id="scope">
+      <button data-v="main">只翻正文</button>
+      <button data-v="page">整页都翻</button>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="labelRow"><span class="label">显示方式</span></div>
+    <div class="seg" id="layout">
+      <button data-v="both">双语对照</button>
+      <button data-v="transOnly">仅译文</button>
+    </div>
+  </section>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <footer class="foot">
+    <span class="usage" id="usage">—</span>
+    <button class="link" id="openOptions">设置</button>
+  </footer>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

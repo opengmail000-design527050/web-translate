@@ -1,0 +1,112 @@
+/* 注入到任意网页，所以每一条选择器都必须窄到不可能碰到页面自己的元素。
+ * 译文节点用 <font data-bt> —— 现代网站几乎没人再给 font 写样式，
+ * 而它默认是行内元素，就算我们的样式全被页面覆盖掉，最坏也只是「译文接在原文后面」，
+ * 不会把版面撑坏。 */
+
+font.bt-tr[data-bt] {
+  display: block !important;
+  margin: 0.35em 0 0 !important;
+  padding: 0 !important;
+  border: 0;
+  font-family: inherit;
+  font-weight: inherit;
+  font-style: normal;
+  line-height: 1.7 !important;
+  text-align: inherit;
+  letter-spacing: 0;
+  /* 页面用 flex 排版时，让译文自己占一行 */
+  flex-basis: 100%;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+/* 左侧竖线：唯一用到强调色的地方，压得很淡，扫一眼能分清中英，又不抢正文 */
+font.bt-tr[data-bt].bt-mark-line {
+  border-left: 2px solid rgba(254, 188, 185, 0.5) !important;
+  padding-left: 0.62em !important;
+}
+
+/* 淡化原文：原文压成中灰，译文的颜色在插入时按原文的计算色写成行内样式，
+   所以这里只管原文，不会把译文一起染灰。 */
+.bt-dim {
+  color: #9aa0a6 !important;
+}
+
+/* 仅译文：把原文的字号压成 0（连纯文本节点一起收掉），
+   译文自己带着行内 px 字号，不受影响。 */
+.bt-only {
+  font-size: 0 !important;
+  line-height: 0 !important;
+}
+.bt-only font.bt-tr[data-bt] {
+  margin-top: 0 !important;
+}
+
+/* 等待中的三个点 */
+font.bt-tr[data-bt].bt-loading {
+  display: inline-block !important;
+  vertical-align: middle;
+  opacity: 0.75;
+}
+font.bt-tr[data-bt].bt-loading::after {
+  content: "";
+  display: inline-block;
+  width: 2.6em;
+  height: 0.34em;
+  background:
+    radial-gradient(circle 0.17em at 0.17em 50%, #febcb9 99%, transparent) 0 50% / 0.9em 100% no-repeat,
+    radial-gradient(circle 0.17em at 0.17em 50%, #b9bbc0 99%, transparent) 0.9em 50% / 0.9em 100% no-repeat,
+    radial-gradient(circle 0.17em at 0.17em 50%, #b9bbc0 99%, transparent) 1.8em 50% / 0.9em 100% no-repeat;
+  animation: bt-blink 1.1s ease-in-out infinite;
+}
+@keyframes bt-blink {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+
+/* 翻译失败的段落：不塞任何文字进正文，只在原文左边留一道极淡的痕迹 */
+.bt-failed {
+  box-shadow: -2px 0 0 0 rgba(254, 188, 185, 0.35);
+}
+
+/* ---------------- 角落里的小提示 ---------------- */
+#bt-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  padding: 8px 13px;
+  border-radius: 9px;
+  background: rgba(20, 20, 22, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.3);
+  color: #ededee;
+  font: 12.5px/1.5 "PingFang SC", "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+#bt-toast.bt-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+#bt-toast .bt-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #febcb9;
+  flex: none;
+}
+#bt-toast.bt-quiet .bt-dot {
+  background: #6f7276;
+}
+#bt-toast.bt-busy .bt-dot {
+  animation: bt-blink 1.1s ease-in-out infinite;
+}
