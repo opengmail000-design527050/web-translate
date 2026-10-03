@@ -7,7 +7,7 @@
 <body>
   <header class="head">
     <div class="brand">
-      <img class="mark" src="../icons/icon32.png" alt="">
+      <img class="mark" src="../icons/icon.svg" alt="">
       <span class="name">Web Translate</span>
     </div>
     <label class="switch" title="总开关">
@@ -29,7 +29,11 @@
   </section>
 
   <div class="actWrap">
-    <button class="act" id="actBtn">翻译此页</button>
+    <button class="act" id="actBtn"><span id="actText">翻译此页</span><kbd class="key hidden" id="actKey"></kbd></button>
+    <label class="check siteRow hidden" id="siteRow">
+      <input type="checkbox" id="siteAuto">
+      <span>总是翻译 <b id="siteHost"></b></span>
+    </label>
   </div>
 
   <section class="block">

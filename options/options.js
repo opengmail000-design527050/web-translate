@@ -55,6 +55,23 @@ async function init() {
   paintAll();
   bind();
   refreshStats();
+  paintShortcut();
+  $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
+  // 第一次装上会自动打开这一页，要做的第一件事就是填 Key
+  if (!S.apiKey) $('apiKey').focus();
+}
+
+/* 快捷键照实写：用户可能改过，也可能跟别的插件撞了、压根没分到。 */
+async function paintShortcut() {
+  let key = '';
+  try {
+    const all = await chrome.commands.getAll();
+    const c = all.find((x) => x.name === 'toggle-translate');
+    key = (c && c.shortcut) || '';
+  } catch (_) {}
+  $('keyName').textContent = key;
+  $('keyLead').classList.toggle('hidden', !key);
+  $('keyEdit').textContent = key ? '改快捷键' : '设一个快捷键';
 }
 
 /** 把 S / P 整个刷到界面上。初始化和「恢复默认」都走这里。 */
@@ -287,8 +304,8 @@ async function paintPerm() {
 }
 
 /** 返回是否拿到了权限。必须由用户点击触发，Chrome 才允许弹这个授权框。 */
-async function requestApiPermission() {
-  const origins = originPattern(S.baseUrl);
+async function requestApiPermission(baseUrl) {
+  const origins = originPattern(typeof baseUrl === 'string' ? baseUrl : S.baseUrl);
   if (!origins) return true;
   let granted = false;
   try { granted = await chrome.permissions.request({ origins: [origins] }); } catch (_) {}
@@ -351,6 +368,9 @@ function bind() {
 
   $('siteAdd').addEventListener('click', addSite);
   $('siteInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') addSite(); });
+
+  // chrome:// 页面不能用链接打开，只能让插件替你开
+  $('keyEdit').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
 
   $('testBtn').addEventListener('click', runTest);
   $('permBtn').addEventListener('click', requestApiPermission);
@@ -498,21 +518,26 @@ function esc(x) {
 
 async function runTest() {
   const btn = $('testBtn');
+  /* 测的是表单上眼下写着的这一套。刚粘进 Key 就点测试时，输入框的 change 才刚触发，
+     存盘还在路上 —— 让后台自己去读设置，可能读到的是上一个 Key。 */
+  const form = {};
+  for (const k of PROFILE_KEYS) form[k] = $(k).value.trim();
 
   // 测试按钮本身就是一次用户手势，顺手把缺的地址权限要了
-  if (!(await hasApiPermission(S.baseUrl)) && !(await requestApiPermission())) {
-    paintTestCard(cardHead(S.model, 'bad', '未授权') +
+  if (!(await hasApiPermission(form.baseUrl)) && !(await requestApiPermission(form.baseUrl))) {
+    paintTestCard(cardHead(form.model, 'bad', '未授权') +
       '<div class="mcard-err">没有访问该 API 地址的权限，已取消。</div>');
     return;
   }
 
-  paintTestCard(cardHead(S.model, 'wait', '请求中'));
+  paintTestCard(cardHead(form.model, 'wait', '请求中'));
   btn.disabled = true;
-  const res = await chrome.runtime.sendMessage({ type: 'testApi', payload: {} });
+  let res = null;
+  try { res = await chrome.runtime.sendMessage({ type: 'testApi', payload: form }); } catch (_) {}
   btn.disabled = false;
 
   if (!res || !res.ok) {
-    paintTestCard(cardHead(S.model, 'bad', '失败') +
+    paintTestCard(cardHead(form.model, 'bad', '失败') +
       `<div class="mcard-err">${esc((res && res.error) || '无响应')}</div>`);
     return;
   }

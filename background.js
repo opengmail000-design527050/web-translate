@@ -1,4 +1,4 @@
-import { DEFAULTS, getSettings, resolveTargetName, hasApiPermission } from './common.js';
+import { DEFAULTS, getSettings, setSettings, resolveTargetName, hasApiPermission, ensureContent } from './common.js';
 
 /* ------------------------------------------------------------------ *
  * 消息入口
@@ -42,13 +42,15 @@ try {
   });
 } catch (_) {}
 
-/* 快捷键：Alt+A */
+/* 快捷键：Alt+A。按下去就是明确要翻这一页，跟弹窗里点「翻译此页」一样：
+   总开关关着就顺手打开，页面里还没有内容脚本就补注入一份 —— 不能按了没反应。 */
 chrome.commands.onCommand.addListener(async (cmd) => {
   if (cmd !== 'toggle-translate') return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab && tab.id) {
-    try { await chrome.tabs.sendMessage(tab.id, { type: 'toggle' }); } catch (_) {}
-  }
+  if (!tab || !tab.id || (tab.url && !/^https?:\/\//.test(tab.url))) return;
+  if (!(await ensureContent(tab.id))) return;
+  if (!(await getSettings()).enabled) await setSettings({ enabled: true });
+  try { await chrome.tabs.sendMessage(tab.id, { type: 'toggle' }); } catch (_) {}
 });
 
 /* ------------------------------------------------------------------ *
@@ -545,16 +547,20 @@ async function postJson(url, key, body, timeoutMs, retries, job) {
 
       const text = await res.text();
       if (!res.ok) {
-        let detail = text.slice(0, 300);
+        let detail = text.slice(0, 300), code = '';
         try {
           const j = JSON.parse(text);
-          detail = (j.error && (j.error.message || j.error.code)) || detail;
+          const e = j.error || {};
+          detail = (typeof e === 'string' ? e : e.message || e.code) || j.message || detail;
+          code = String(e.code || e.type || '');
         } catch (_) {}
-        const err = new Error(`HTTP ${res.status}: ${detail}`);
+        const quota = isQuota(res.status, code, detail);
+        const err = new Error(httpMessage(res.status, detail, quota));
         /* 暂时性的才重发：408 超时、425 太早、429 限流，以及所有 5xx。
          * 其余（400 请求不合法、401 key 不对、404 模型名不对……）都是配置错了，
-         * 重发一模一样的请求只会得到一模一样的拒绝。 */
-        if (res.status === 429) {
+         * 重发一模一样的请求只会得到一模一样的拒绝。
+         * 余额用完也常常回 429（OpenAI 就是），可它等多久都不会好，不能当限流去排队重试。 */
+        if (res.status === 429 && !quota) {
           const wait = rateHit(url, retryAfterMs(res));
           if (rateTries++ < 1 && attempt < retries) { lastErr = err; continue; }
           err.code = 'rate';
@@ -562,7 +568,7 @@ async function postJson(url, key, body, timeoutMs, retries, job) {
           err.noRetry = true;
           throw err;
         }
-        const transient = res.status === 408 || res.status === 425 || res.status >= 500;
+        const transient = !quota && (res.status === 408 || res.status === 425 || res.status >= 500);
         if (transient) {
           lastErr = err;
           if (attempt < retries) { await sleep(1200 * (attempt + 1)); continue; }
@@ -572,18 +578,54 @@ async function postJson(url, key, body, timeoutMs, retries, job) {
         throw err;
       }
       rateClear(url);
-      return JSON.parse(text);
+      try { return JSON.parse(text); }
+      catch (_) {
+        // 地址指到了网页而不是接口（最常见的是漏了 /v1），回来的是一页 HTML
+        const err = new Error('接口返回的不是 JSON，API 地址多半填错了（一般要填到 /v1）');
+        err.noRetry = true;
+        throw err;
+      }
     } catch (e) {
       done();
       if (job && job.cancelled) throw cancelError();
       lastErr = e;
       if (e && e.noRetry) throw e;
       if (e && e.name === 'AbortError') { if (attempt < retries) continue; throw new Error('请求超时'); }
-      if (attempt >= retries) throw e;
+      if (attempt >= retries) throw netError(e);
       await sleep(1000 * (attempt + 1));
     }
   }
-  throw lastErr || new Error('请求失败');
+  throw netError(lastErr) || new Error('请求失败');
+}
+
+/* 服务商的原话往往是一长串英文，弹窗那一小格放不下，也不告诉人该去哪儿改。
+   常见的几种先用一句中文说清楚，原话缩短了接在后面，查问题时还用得上。 */
+function httpMessage(status, detail, quota) {
+  const said = String(detail || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+  const raw = `HTTP ${status}` + (said ? ': ' + said : '');
+  let hint = '';
+  if (quota) hint = '账户余额或额度用完了';
+  else if (status === 401) hint = 'API Key 不对或已失效';
+  else if (status === 403) hint = '这个 Key 没有调用该模型的权限';
+  else if (status === 404) hint = 'API 地址或模型名不对';
+  else if (status === 429) hint = '请求太频繁，被服务商限流了';
+  else if (status === 400 && /reasoning|thinking/i.test(said)) hint = '服务商不认这种推理参数，去设置页换一种「推理参数写法」';
+  else if (status >= 500) hint = '服务商那边暂时出错了';
+  return hint ? `${hint}（${raw}）` : raw;
+}
+
+/* 余额不足。DeepSeek 回 402；OpenAI 回 429 + insufficient_quota。
+   不能只看 quota 这个词：Gemini 的普通限流也写着「check quota」，那种等一等就好。 */
+function isQuota(status, code, detail) {
+  if (status === 402) return true;
+  if (status !== 429 && status !== 403) return false;
+  return /insufficient|billing|balance|exceeded your current quota|余额|欠费/i.test(code + ' ' + detail);
+}
+
+/** fetch 自己抛的 TypeError（Failed to fetch）只说明「没连上」，换句人话。 */
+function netError(e) {
+  if (e && e.name === 'TypeError') return new Error('连不上 API 地址（网络断了，或者地址填错了）');
+  return e;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -743,4 +785,5 @@ function reasoningTokens(u) {
 }
 
 /* 给测试用的导出，浏览器里走不到 */
-export const __test = { edgeGap, parseLines, buildSystemPrompt, applyReasoning, joinUrl, staleKeys, safeTitle, oneLine };
+export const __test = { edgeGap, parseLines, buildSystemPrompt, applyReasoning, joinUrl, staleKeys, safeTitle, oneLine,
+                        httpMessage, isQuota };

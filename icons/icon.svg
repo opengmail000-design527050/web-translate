@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <mask id="l"><rect width="64" height="64" fill="#fff"/><rect x="7" y="22" width="18" height="4" rx="2"/><rect x="7" y="30" width="18" height="4" rx="2"/><rect x="7" y="38" width="12" height="4" rx="2"/></mask>
+    <mask id="r"><rect width="64" height="64" fill="#fff"/><rect x="39" y="22" width="18" height="4" rx="2"/><rect x="39" y="30" width="18" height="4" rx="2"/><rect x="39" y="38" width="12" height="4" rx="2"/></mask>
+  </defs>
+  <path d="M30 14C21 9 11 8 2 10v42c9-2 19-1 28 4z" fill="#a8949e" mask="url(#l)"/>
+  <path d="M34 14c9-5 19-6 28-4v42c-9-2-19-1-28 4z" fill="#d2a7aa" mask="url(#r)"/>
+</svg>

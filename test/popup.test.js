@@ -57,6 +57,9 @@ const doc = {
 const storage = {};
 const sent = [];              // 发给页面的消息
 let optionsOpened = 0;
+let pageStatus = null;        // 页面对 getStatus 的回答；null = 页面里没有内容脚本
+let tabUrl = 'https://example.com/article';
+const navigated = [];         // chrome.tabs.update 去过的地址
 
 const chrome = {
   storage: {
@@ -72,9 +75,16 @@ const chrome = {
     onChanged: { addListener() {} }
   },
   tabs: {
-    async query() { return [{ id: 7, url: 'https://example.com/article' }]; },
-    async sendMessage(tabId, msg) { sent.push(msg); return null; }
+    async query() { return [{ id: 7, url: tabUrl }]; },
+    async sendMessage(tabId, msg) {
+      sent.push(msg);
+      if (msg.type === 'getStatus') return pageStatus;
+      if (msg.type === 'ping') return pageStatus ? { ok: true } : null;
+      return null;
+    },
+    async update(tabId, props) { navigated.push(props.url); }
   },
+  commands: { async getAll() { return [{ name: 'toggle-translate', shortcut: 'Alt+A' }]; } },
   runtime: { openOptionsPage() { optionsOpened++; }, sendMessage: async () => ({ ok: false }) },
   i18n: { getUILanguage: () => 'zh-CN' }
 };
@@ -85,6 +95,7 @@ const timeout = (f, ms) => { const t = setTimeout(f, ms); if (t.unref) t.unref()
 const sandbox = { console, document: doc, chrome, setTimeout: timeout, clearTimeout,
                   setInterval: () => 0, clearInterval: () => {}, URL, Math, Date, JSON };
 sandbox.window = sandbox;
+sandbox.close = () => {};
 const ctx = vm.createContext(sandbox);
 
 const common = fs.readFileSync(__dirname + '/../common.js', 'utf8').replace(/^export /gm, '');
@@ -101,7 +112,7 @@ storage.settings = {
   scope: 'page', reasoning: 'low'
 };
 
-vm.runInContext(common + '\n' + popup + '\nglobalThis.__p = { init, getP: () => P, getS: () => S };',
+vm.runInContext(common + '\n' + popup + '\nglobalThis.__p = { init, getP: () => P, getS: () => S, arxivHtml };',
                 ctx, { filename: 'popup-bundle.js' });
 const O = vm.runInContext('globalThis.__p', ctx);
 
@@ -238,6 +249,89 @@ const itemText = (b) => b._kids.map((k) => k.textContent).join(' · ') || b.text
   clickTag();
   (docOn.keydown || []).forEach((f) => f({ key: 'a' }));
   check('别的键不受影响', !$('pfMenu').classList.contains('hidden'));
+
+  /* ---------------------------------------------------------------- *
+   * [8] 「总是翻译」：就是 autoSites 里加减当前主机名
+   * ---------------------------------------------------------------- */
+  console.log('\n[8] 总是翻译这个网站');
+  sent.length = 0;
+  $('siteAuto').checked = true;
+  await Promise.all(fire($('siteAuto'), 'change', { target: $('siteAuto') }));
+  await sleep(10);
+  check('勾上：加进自动翻译列表', (storage.settings.autoSites || []).includes('example.com'),
+        JSON.stringify(storage.settings.autoSites));
+  check('勾上：当前页还没翻，顺手翻上', sent.some((m) => m.type === 'setActive' && m.value === true), JSON.stringify(sent));
+  sent.length = 0;
+  $('siteAuto').checked = false;
+  await Promise.all(fire($('siteAuto'), 'change', { target: $('siteAuto') }));
+  await sleep(10);
+  check('取消：从列表里拿掉', !(storage.settings.autoSites || []).includes('example.com'),
+        JSON.stringify(storage.settings.autoSites));
+  check('取消：不去动眼前这一页', !sent.some((m) => m.type === 'setActive'), JSON.stringify(sent));
+
+  /* ---------------------------------------------------------------- *
+   * [9] 没填 Key：主按钮直接变成去填 Key 的入口
+   * ---------------------------------------------------------------- */
+  console.log('\n[9] 没填 Key');
+  pageStatus = { ok: true, active: false, busy: false, total: 0, seen: 0, done: 0, failed: 0, error: '', title: 'Article' };
+  storage.settings.apiKey = '';
+  await freshPopup();
+  await sleep(10);
+  check('状态写着还差一步', $('statusText').textContent.includes('API Key'), $('statusText').textContent);
+  check('主按钮去填 Key', $('actBtn').dataset.mode === 'setup' && $('actText').textContent.includes('API Key'),
+        $('actBtn').dataset.mode + ' / ' + $('actText').textContent);
+  check('快捷键提示先藏起来', $('actKey').classList.contains('hidden'));
+  check('「总是翻译」先藏起来', $('siteRow').classList.contains('hidden'));
+  const opened = optionsOpened;
+  sent.length = 0;
+  await Promise.all(fire($('actBtn'), 'click'));
+  check('点了打开设置页，不去页面上空翻', optionsOpened === opened + 1 && !sent.some((m) => m.type === 'setActive'),
+        JSON.stringify({ optionsOpened, sent }));
+
+  /* ---------------------------------------------------------------- *
+   * [10] 进度的分母是已经轮到的段落
+   * ---------------------------------------------------------------- */
+  console.log('\n[10] 进度');
+  storage.settings.apiKey = 'sk-x';
+  pageStatus = { ok: true, active: true, busy: true, total: 80, seen: 10, done: 5, failed: 0, error: '',
+                 title: 'Article', target: '简体中文' };
+  await freshPopup();
+  await sleep(10);
+  check('写的是 5/10 而不是 5/80', $('statusText').textContent.startsWith('正在翻译 5/10 段'), $('statusText').textContent);
+  check('进度条到一半', $('barFill').style.width === '50%', $('barFill').style.width);
+  check('主按钮是退出翻译', $('actText').textContent === '退出翻译' && $('actBtn').dataset.mode === '',
+        $('actText').textContent);
+  check('快捷键照实写在按钮上', $('actKey').textContent === 'Alt+A' && !$('actKey').classList.contains('hidden'),
+        $('actKey').textContent);
+  check('「总是翻译」出现了，写着主机名', !$('siteRow').classList.contains('hidden') && $('siteHost').textContent === 'example.com',
+        $('siteHost').textContent);
+
+  /* ---------------------------------------------------------------- *
+   * [11] PDF：arXiv 给网页版入口，别的 PDF 照实说
+   * ---------------------------------------------------------------- */
+  console.log('\n[11] PDF');
+  check('arXiv 新编号', O.arxivHtml('https://arxiv.org/pdf/1706.03762') === 'https://arxiv.org/html/1706.03762');
+  check('带版本号和 .pdf', O.arxivHtml('https://arxiv.org/pdf/2401.04088v2.pdf') === 'https://arxiv.org/html/2401.04088v2');
+  check('export 子域 + 查询串', O.arxivHtml('https://export.arxiv.org/pdf/1706.03762v7?download=1') === 'https://arxiv.org/html/1706.03762v7');
+  check('摘要页不是 PDF', O.arxivHtml('https://arxiv.org/abs/1706.03762') === '');
+
+  tabUrl = 'https://arxiv.org/pdf/1706.03762v7';
+  sent.length = 0;
+  await freshPopup();
+  await sleep(10);
+  check('arXiv PDF：说清楚为什么不能翻', $('statusText').textContent.includes('PDF'), $('statusText').textContent);
+  check('arXiv PDF：主按钮换成打开网页版', $('actBtn').dataset.mode === 'arxiv' && !$('actBtn').disabled);
+  check('arXiv PDF：不往 PDF 里注入、不问状态', !sent.some((m) => m.type === 'ping' || m.type === 'getStatus'),
+        JSON.stringify(sent));
+  await Promise.all(fire($('actBtn'), 'click'));
+  check('点了就在当前标签页打开网页版', navigated[navigated.length - 1] === 'https://arxiv.org/html/1706.03762v7',
+        JSON.stringify(navigated));
+
+  tabUrl = 'https://example.com/files/report.pdf';
+  await freshPopup();
+  await sleep(10);
+  check('别的 PDF：主按钮置灰', $('actBtn').disabled === true && $('actBtn').dataset.mode === '');
+  tabUrl = 'https://example.com/article';
 
   console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
   process.exit(fail ? 1 : 0);

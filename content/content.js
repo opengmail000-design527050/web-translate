@@ -13,8 +13,18 @@
  */
 (() => {
   'use strict';
-  if (window.__btLoaded) return;
-  window.__btLoaded = true;
+  /* 同一个页面里只留一份。弹窗和快捷键会在「没有内容脚本」时补注入（见 common.js
+   * 的 ensureContent），于是有两种「已经有一份」：
+   *   - 同一个隔离环境里注入了两次（补注入刚好撞上清单里的脚本）：旧的活着，这份退出。
+   *   - 插件更新 / 重新加载之后，旧版脚本还留在页面里，只是跟后台断了线。它在另一个
+   *     隔离环境里，全局变量互相看不见（test/e2e/reinject.cjs 实测），却还挂着
+   *     MutationObserver：页面再长出新段落，它照样去翻、发不出请求，就把段落标成失败，
+   *     还往共用的角落提示里写「Extension context invalidated」。DOM 事件是两边都
+   *     听得见的，广播一声让它把自己收干净，再由这一份接手。 */
+  const alive = () => { try { return !!chrome.runtime.id; } catch (_) { return false; } };
+  const prev = window.__btInstance;
+  if (prev && prev.alive()) return;
+  try { document.dispatchEvent(new CustomEvent('bt-takeover')); } catch (_) {}
 
   const DEFAULTS = {
     enabled: true,
@@ -1100,6 +1110,14 @@
     return el;
   }
 
+  /* 进度的分母是「已经轮到的段落」，不是整页。只翻进入视野的段落时，整页的总数里
+     大半是还没滚到的 —— 拿它当分母，看完一屏也只显示 12/82，像是卡住了。 */
+  function seenCount() {
+    let n = 0;
+    for (const u of St.units) if (u.status !== 'new') n++;
+    return n;
+  }
+
   function paintToast(force) {
     if (!document.body) return;
     const el = toastEl();
@@ -1107,7 +1125,7 @@
     let msg;
     if (!St.active) msg = '已收起译文';
     else if (St.error) msg = '出错了：' + String(St.error).slice(0, 60);
-    else if (busy) msg = `正在翻译 ${St.done}/${St.units.length} 段`;
+    else if (busy) msg = `正在翻译 ${St.done}/${seenCount()} 段`;
     else if (St.units.length) msg = `已翻译 ${St.done} 段` + (St.failed ? ` · ${St.failed} 段失败` : '');
     else msg = '这一页没有需要翻译的内容';
 
@@ -1131,6 +1149,8 @@
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || !msg.type) return;
 
+    if (msg.type === 'ping') { sendResponse({ ok: true }); return; }
+
     if (msg.type === 'getStatus') {
       sendResponse({
         ok: true,
@@ -1138,13 +1158,15 @@
         host: location.hostname,
         title: document.title,
         total: St.units.length,
+        seen: seenCount(),
         done: St.done,
         failed: St.failed,
         busy: St.inflight > 0 || St.queue.length > 0 || St.retrying > 0,
         error: St.error,
         target: St.targetName,
         scope: St.S.scope,
-        fellBack: St.fellBack
+        fellBack: St.fellBack,
+        pdf: document.contentType === 'application/pdf'
       });
       return;
     }
@@ -1198,6 +1220,19 @@
       }
     }
   }
+
+  /* 新注入的一份来接手了（见文件开头）。断了线的这份把自己贴的译文、提示、观察者
+     全部收掉，之后就再也不碰这个页面。 */
+  window.__btInstance = { alive };
+  document.addEventListener('bt-takeover', () => {
+    if (alive()) return;
+    try { deactivate(true); } catch (_) {}
+    clearTimeout(St.scanTimer);
+    clearTimeout(St.cacheTimer);
+    clearTimeout(St.toastTimer);
+    const t = document.getElementById('bt-toast');
+    if (t) t.remove();
+  });
 
   /* 测试钩子。浏览器里 window.__BT_TEST__ 不存在，这几行什么都不做。 */
   if (typeof window !== 'undefined' && window.__BT_TEST__) {

@@ -1,9 +1,12 @@
 import { DEFAULTS, getSettings, setSettings,
-         getProfiles, saveProfiles, pickProfile } from '../common.js';
+         getProfiles, saveProfiles, pickProfile, ensureContent } from '../common.js';
 
 const $ = (id) => document.getElementById(id);
 let S = Object.assign({}, DEFAULTS);
 let tabId = null;
+let host = '';       // 当前标签页的主机名，「总是翻译」按它记
+let pdfUrl = false;  // 地址一看就是 PDF
+let arxiv = '';      // arXiv 的 PDF 对应的网页版地址
 let last = null;     // 最近一次从页面拿到的状态
 let P = { active: '', list: [] };   // 存了哪几套接口配置
 
@@ -18,10 +21,23 @@ async function init() {
   try { P = await getProfiles(); } catch (_) {}
   paintSettings();
   bind();
+  await paintShortcut();
   await connectTab();
   refreshStatus();
   refreshUsage();
   setInterval(refreshStatus, 1000);
+}
+
+/* 快捷键可能被用户改过，也可能跟别的插件撞了、压根没分到 —— 照实写，没有就不写。 */
+async function paintShortcut() {
+  let key = '';
+  try {
+    const all = await chrome.commands.getAll();
+    const c = all.find((x) => x.name === 'toggle-translate');
+    key = (c && c.shortcut) || '';
+  } catch (_) {}
+  $('actKey').textContent = key;
+  $('actKey').title = key ? `快捷键 ${key}` : '';
 }
 
 function paintSettings() {
@@ -129,11 +145,21 @@ function bind() {
 
   $('actBtn').addEventListener('click', async () => {
     if (!tabId) return;
-    const on = !!(last && last.active);
-    if (!S.enabled && !on) await save({ enabled: true });
-    try { await chrome.tabs.sendMessage(tabId, { type: 'setActive', value: !on }); } catch (_) {}
-    $('master').checked = !!S.enabled;
-    setTimeout(refreshStatus, 120);
+    const mode = $('actBtn').dataset.mode;
+    if (mode === 'setup') { chrome.runtime.openOptionsPage(); return; }
+    if (mode === 'arxiv') { chrome.tabs.update(tabId, { url: arxiv }); window.close(); return; }
+    await setActive(!(last && last.active));
+  });
+
+  /* 「总是翻译」只是 autoSites 里加减一条，跟设置页那张卡片是同一份数据。
+     勾上就是想看译文，当前页还没翻的话顺手翻上；取消只管以后，眼前这页留给「退出翻译」。 */
+  $('siteAuto').addEventListener('change', async (e) => {
+    const on = e.target.checked;
+    const list = (S.autoSites || []).filter((h) => h !== host);
+    if (on) list.push(host);
+    await save({ autoSites: list });
+    toast(on ? `以后打开 ${host} 会自动翻译` : `${host} 不再自动翻译`);
+    if (on && !(last && last.active)) await setActive(true);
   });
 
   $('reasoning').addEventListener('click', (e) => {
@@ -197,40 +223,102 @@ function bind() {
   $('openOptions').addEventListener('click', () => chrome.runtime.openOptionsPage());
 }
 
+async function setActive(on) {
+  if (!S.enabled && on) await save({ enabled: true });
+  try { await chrome.tabs.sendMessage(tabId, { type: 'setActive', value: on }); } catch (_) {}
+  $('master').checked = !!S.enabled;
+  setTimeout(refreshStatus, 120);
+}
+
+/** arXiv 的 PDF 都有一份网页版（arxiv.org/html/编号），老论文也有。 */
+function arxivHtml(url) {
+  const m = String(url || '').match(/^https?:\/\/(?:www\.|export\.)?arxiv\.org\/pdf\/([^?#]+?)(?:\.pdf)?\/?(?:[?#].*)?$/i);
+  return m ? 'https://arxiv.org/html/' + m[1] : '';
+}
+
 async function connectTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.url || !/^https?:\/\//.test(tab.url)) return;
   tabId = tab.id;
+  try { host = new URL(tab.url).hostname; } catch (_) {}
+  arxiv = arxivHtml(tab.url);
+  pdfUrl = !!arxiv || /\.pdf$/i.test(tab.url.split(/[?#]/)[0]);
+  /* 装好（或更新）插件之前就开着的页面里没有内容脚本，以前要用户刷新一下；
+     现在弹窗一打开就补注入。PDF 里没有可翻的段落，不去碰它。 */
+  if (!pdfUrl) await ensureContent(tabId);
+}
+
+/* 主按钮。mode 决定点下去做什么：''=开关翻译，setup=去填 Key，arxiv=换网页版 */
+function act(text, mode, disabled) {
+  const b = $('actBtn');
+  $('actText').textContent = text;
+  b.dataset.mode = mode || '';
+  b.disabled = !!disabled;
+  b.classList.toggle('next', !!mode);
+  b.classList.toggle('on', !mode && !!(last && last.active));
+  // 快捷键只管开关翻译，按钮干别的事时不提它
+  $('actKey').classList.toggle('hidden', !!mode || !$('actKey').textContent);
+}
+
+function paintIdle(text, dot) {
+  $('statusText').textContent = text;
+  if (dot) $('dot').dataset.s = dot;
+  else $('dot').removeAttribute('data-s');
+  $('barFill').style.width = '0%';
+  for (const id of ['errText', 'retryBtn', 'purgeBtn']) $(id).classList.add('hidden');
+  $('scopeTag').textContent = '';
 }
 
 async function refreshStatus() {
-  if (!tabId) {
-    $('statusText').textContent = '这个页面不能翻译';
-    $('dot').removeAttribute('data-s');
-    $('actBtn').disabled = true;
+  let r = null;
+  if (tabId && !pdfUrl) {
+    try { r = await chrome.tabs.sendMessage(tabId, { type: 'getStatus' }); } catch (_) {}
+  }
+  last = r;
+  const pdf = pdfUrl || !!(r && r.pdf);
+
+  // 「总是翻译」只在真能翻的页面上出现，没填 Key 时先别分散注意力
+  $('siteRow').classList.toggle('hidden', !r || pdf || !S.apiKey);
+  $('siteHost').textContent = host;
+  $('siteAuto').checked = (S.autoSites || []).includes(host);
+
+  if (pdf) {
+    /* 分段翻译要的是网页里一段一段的文字，PDF 查看器里拿不到。
+       arXiv 的论文都有网页版，给个一键过去的入口；别的 PDF 只能照实说。 */
+    paintIdle('PDF 没法分段翻译', arxiv ? 'next' : '');
+    $('pageTitle').textContent = arxiv ? '这篇论文有网页版，打开就能对照着读' : '';
+    if (arxiv) act('打开 arXiv 网页版', 'arxiv');
+    else act('翻译此页', '', true);
     return;
   }
-
-  let r = null;
-  try { r = await chrome.tabs.sendMessage(tabId, { type: 'getStatus' }); } catch (_) {}
-  last = r;
 
   if (!r) {
-    // 装好插件之前就打开的标签页里没有内容脚本，刷新一下才有
-    $('statusText').textContent = '页面未就绪，刷新一下试试';
-    $('dot').removeAttribute('data-s');
-    $('actBtn').disabled = true;
+    // 应用商店、新标签页、浏览器自己的页面都不让插件碰
+    paintIdle('这个页面不能翻译');
+    $('pageTitle').textContent = '';
+    act('翻译此页', '', true);
     return;
   }
 
-  $('actBtn').disabled = false;
-  $('actBtn').textContent = r.active ? '退出翻译' : '翻译此页';
-  $('actBtn').classList.toggle('on', !!r.active);
+  $('pageTitle').textContent = r.title || '';
+
+  /* 第一次用还没填 Key：主按钮直接变成去填 Key 的入口，
+     而不是点了「翻译此页」之后才报一句错。 */
+  if (!S.apiKey && !r.active) {
+    paintIdle('还差一步：填上 API Key', 'next');
+    act('去设置页填 API Key', 'setup');
+    return;
+  }
+
+  act(r.active ? '退出翻译' : '翻译此页', '');
 
   const busy = !!r.busy;
+  /* 分母用「已经轮到的段落」：只翻进入视野时，整页总数里大半是还没滚到的，
+     拿它当分母，读完一屏也只有 15%，看着像卡住了。老版本的页面没有 seen，退回 total。 */
+  const seen = r.seen === undefined ? r.total : r.seen;
   let text;
   if (!r.active) text = S.enabled ? '未翻译' : '插件已关闭';
-  else if (busy) text = `正在翻译 ${r.done}/${r.total} 段`;
+  else if (busy) text = `正在翻译 ${r.done}/${seen} 段`;
   else if (r.total) text = `已翻译 ${r.done} 段` + (r.failed ? `　·　${r.failed} 段失败` : '');
   else text = '这一页没有需要翻译的内容';
   if (r.active && r.target) text += `　·　${r.target}`;
@@ -240,8 +328,7 @@ async function refreshStatus() {
      还以为是「只翻正文」没生效。 */
   $('scopeTag').textContent = r.fellBack ? '没认出正文，已按整页翻' : '';
   $('dot').dataset.s = r.error ? 'error' : (busy ? 'busy' : (r.active && r.done ? 'ready' : ''));
-  $('pageTitle').textContent = r.title || '';
-  $('barFill').style.width = r.total ? Math.round((r.done / r.total) * 100) + '%' : '0%';
+  $('barFill').style.width = r.active && seen ? Math.round((r.done / seen) * 100) + '%' : '0%';
 
   const hasErr = !!r.error;
   $('errText').textContent = r.error || '';

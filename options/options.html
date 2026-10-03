@@ -8,7 +8,7 @@
 <body>
 <main>
   <header class="page-head">
-    <div class="brand"><img class="mark" src="../icons/icon48.png" alt=""><h1>Web Translate</h1></div>
+    <div class="brand"><img class="mark" src="../icons/icon.svg" alt=""><h1>Web Translate</h1></div>
     <p class="sub">分段式网页翻译，中英对照。只翻你正在看的那一屏，翻过的存在本地，重看不再花钱。</p>
   </header>
 
@@ -169,7 +169,8 @@
 
   <section class="card">
     <h2>自动翻译的网站</h2>
-    <p class="lead">打开就自动翻译。其余网站按 <code>Alt+A</code> 或点插件图标手动开。</p>
+    <p class="lead">打开就自动翻译。也可以在弹窗里勾「总是翻译」。其余网站<span id="keyLead">按 <code id="keyName">Alt+A</code> 或</span>点插件图标手动开。
+      <button class="link" id="keyEdit" type="button">改快捷键</button></p>
     <div class="field">
       <div class="inline">
         <input id="siteInput" type="text" spellcheck="false" placeholder="例如 x.com（要带子域，news.ycombinator.com）">
@@ -198,7 +199,7 @@
     </div>
   </section>
 
-  <footer class="page-foot">改动即时生效 · v0.1.0</footer>
+  <footer class="page-foot">改动即时生效 · <span id="ver"></span></footer>
 </main>
 
 <div class="toast" id="toast"></div>

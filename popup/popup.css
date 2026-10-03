@@ -65,6 +65,7 @@ body {
 .dot[data-s="busy"] { background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
 .dot[data-s="ready"] { background: #6f9c7d; }
 .dot[data-s="error"] { background: #d98b8b; }
+.dot[data-s="next"] { background: var(--accent); }
 @keyframes pulse { 0%,100% { opacity: .3 } 50% { opacity: 1 } }
 
 .statusText { font-size: 12.5px; color: var(--text); }
@@ -113,13 +114,31 @@ body {
   cursor: pointer;
   transition: border-color .15s ease, color .15s ease, background .15s ease;
 }
+.act { position: relative; }
 .act:hover { border-color: var(--accent-dim); }
 .act.on {
   background: #241b1b;
   border-color: #4a3232;
   color: var(--accent);
 }
+/* 还差一步才能翻（没填 Key、PDF 要换网页版）：按钮换成去那一步的入口，用强调色点一下 */
+.act.next { color: var(--accent); border-color: #4a3232; }
 .act:disabled { color: var(--dim); cursor: default; border-color: var(--line); background: var(--panel); }
+
+/* 快捷键提示：贴在主按钮右边，压得很淡，知道有这回事就行 */
+.key {
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font: 10.5px/1 -apple-system, "Segoe UI", sans-serif;
+  color: var(--dim);
+  letter-spacing: .5px;
+}
+.act:disabled .key { opacity: .5; }
+
+.siteRow { margin-top: 11px; }
+.siteRow b { font-weight: 400; color: var(--text); }
 
 /* ---------- blocks ---------- */
 .block { padding: 13px 16px; border-bottom: 1px solid var(--line); }
@@ -255,7 +274,33 @@ body {
 .hint { margin-top: 8px; font-size: 10.5px; color: var(--dim); line-height: 1.5; }
 
 .check { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--muted); }
-.check input { accent-color: var(--accent-dim); width: 13px; height: 13px; }
+/* 系统自带的勾选框在深色底上是一块实心色块，压过了上面的主按钮。自己画一个细框的 */
+.check input {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 13px; height: 13px;
+  margin: 0;
+  border: 1px solid #3c3d43;
+  border-radius: 3.5px;
+  background: var(--panel-2);
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.check input::after {
+  content: "";
+  width: 6px; height: 3px;
+  margin-top: -1px;
+  border: solid #1a1112;
+  border-width: 0 0 1.5px 1.5px;
+  transform: rotate(-45deg) scale(0);
+  transition: transform .12s ease;
+}
+.check input:checked { background: var(--accent); border-color: var(--accent); }
+.check input:checked::after { transform: rotate(-45deg) scale(1); }
+.check:hover input:not(:checked) { border-color: var(--accent-dim); }
 .check:hover span { color: var(--text); }
 
 /* ---------- foot ---------- */

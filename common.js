@@ -165,5 +165,30 @@ export async function hasApiPermission(baseUrl) {
   catch (_) { return true; }
 }
 
-/* autoSites 存的是主机名（含子域，精确匹配）。设置页负责增删，
- * content.js 启动时自己比一次 —— 没有第三个地方需要它，就不再抽函数了。 */
+/* autoSites 存的是主机名（含子域，精确匹配）。设置页和弹窗负责增删，
+ * content.js 启动时自己比一次。 */
+
+/* ------------------------------------------------------------------ *
+ * 内容脚本补注入
+ *
+ * 清单里声明的内容脚本只会注入之后新打开的页面：插件刚装上、刚更新、刚重新加载时，
+ * 已经开着的标签页里都没有它，以前只能让用户自己刷新。弹窗打开和按快捷键都会给
+ * 当前标签页一次 activeTab 授权，借这个机会直接补注入一份。
+ * ------------------------------------------------------------------ */
+async function ping(tabId) {
+  try {
+    const r = await chrome.tabs.sendMessage(tabId, { type: 'ping' });
+    return !!(r && r.ok);
+  } catch (_) { return false; }
+}
+
+/** 返回 true 表示这个标签页里已经有能说话的内容脚本了。 */
+export async function ensureContent(tabId) {
+  if (!tabId) return false;
+  if (await ping(tabId)) return true;
+  try {
+    await chrome.scripting.insertCSS({ target: { tabId }, files: ['content/style.css'] });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content/content.js'] });
+  } catch (_) { return false; }      // 应用商店、新标签页这类地方不让注入
+  return ping(tabId);
+}

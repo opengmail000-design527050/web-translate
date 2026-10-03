@@ -85,6 +85,53 @@ function response(status, text, retryAfter) {
        JSON.stringify({ calls, error: err && err.message }));
   }
 
+  /* 报错要先用一句中文说清该去改什么，服务商的原话留在括号里 */
+  {
+    const T = load(async () => response(401, '{"error":{"message":"Incorrect API key provided"}}'));
+    const err = await T.postJson('https://api.example/v1', 'bad', {}, 1000, 1).then(() => null, (e) => e);
+    ok('401 先说「Key 不对」，原话留着',
+       err && err.message.startsWith('API Key 不对') && err.message.includes('Incorrect API key'), err && err.message);
+  }
+
+  {
+    let calls = 0;
+    const T = load(async () => { calls++; return response(429, '{"error":{"message":"You exceeded your current quota","code":"insufficient_quota"}}'); });
+    const err = await T.postJson('https://quota.example/v1', 'key', {}, 1000, 1).then(() => null, (e) => e);
+    ok('429 + insufficient_quota 是余额用完，不当限流排队重试',
+       calls === 1 && err && err.code !== 'rate' && !err.retryAfter && err.message.includes('余额'),
+       JSON.stringify({ calls, code: err && err.code, msg: err && err.message }));
+  }
+
+  {
+    let calls = 0;
+    const T = load(async () => { calls++; return response(402, '{"error":{"message":"Insufficient Balance"}}'); });
+    const err = await T.postJson('https://api.deepseek.example/v1', 'key', {}, 1000, 1).then(() => null, (e) => e);
+    ok('402（DeepSeek 的余额不足）只发一次、说余额', calls === 1 && err && err.message.includes('余额'),
+       JSON.stringify({ calls, msg: err && err.message }));
+  }
+
+  {
+    let calls = 0;
+    const T = load(async () => { calls++; return response(429, '{"error":{"message":"Resource has been exhausted (e.g. check quota)."}}', '0.01'); });
+    const err = await T.postJson('https://gemini.example/v1', 'key', {}, 1000, 1).then(() => null, (e) => e);
+    ok('普通限流里出现 quota 这个词，仍然按限流处理',
+       err && err.code === 'rate' && calls === 2, JSON.stringify({ calls, code: err && err.code }));
+  }
+
+  {
+    const T = load(async () => { throw new TypeError('Failed to fetch'); });
+    const err = await T.postJson('https://down.example/v1', 'key', {}, 1000, 1).then(() => null, (e) => e);
+    ok('网络不通时说「连不上 API 地址」', err && err.message.startsWith('连不上 API 地址'), err && err.message);
+  }
+
+  {
+    let calls = 0;
+    const T = load(async () => { calls++; return response(200, '<!doctype html><title>Home</title>'); });
+    const err = await T.postJson('https://site.example', 'key', {}, 1000, 1).then(() => null, (e) => e);
+    ok('地址指到网页上（回来的是 HTML）：提示地址填错，不重发',
+       calls === 1 && err && err.message.includes('不是 JSON'), JSON.stringify({ calls, msg: err && err.message }));
+  }
+
   {
     const T = load(async () => response(200, '{}'));
     T.cancelJobs(8, { sessionId: 'old-doc', epoch: 4 });
